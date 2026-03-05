@@ -46,6 +46,8 @@ Create a `Lab Task` issue titled: `[Task] Build the Data Pipeline`
 > may be check issue body
 >
 > Break line at the end of all curl commands json
+>
+> Load test the api to make it robust enough to handle the load by students
 
 > We follow the usual [`Git workflow`](../../../wiki/git-workflow.md) to complete all tasks.
 
