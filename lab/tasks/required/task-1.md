@@ -33,7 +33,7 @@ The database starts empty. We can get anonymized data on task completions in Aut
 
 ## 1. Steps
 
-### 1.1. Follow the usual [`Git workflow`](../../../wiki/git-workflow.md)
+### 1.1. Start with the usual [`Git workflow`](../../../wiki/git-workflow.md)
 
 1. Create a `Lab Task` issue titled: `[Task] Build the Data Pipeline`.
 2. Create a task branch from `main` and switch to it.
