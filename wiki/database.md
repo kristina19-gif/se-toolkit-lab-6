@@ -9,11 +9,7 @@
 - [`SQL`](#sql)
 - [Database schema](#database-schema)
 - [Database row](#database-row)
-- [ERD](#erd)
-  - [ERD notations](#erd-notations)
-    - [ERD in Chen notation](#erd-in-chen-notation)
-    - [ERD in crow's foot notation](#erd-in-crows-foot-notation)
-- [EERD](#eerd)
+- [Database modeling](#database-modeling)
 
 ## What is a database
 
@@ -53,22 +49,6 @@ You can [inspect columns](./pgadmin.md#browse-columns-in-the-table) of a table i
 
 <!-- TODO -->
 
-## ERD
+## Database modeling
 
-ERD (Entity-relationship diagram) is a visual representation of a data model.
-
-<!-- TODO improve description -->
-
-### ERD notations
-
-#### ERD in Chen notation
-
-See [Chen notation](https://www.red-gate.com/blog/chen-erd-notation/).
-
-#### ERD in crow's foot notation
-
-See [Crow’s Foot Notation](https://www.red-gate.com/blog/crow-s-foot-notation/).
-
-## EERD
-
-<!-- TODO add section content -->
+See [Database modeling](./database-modeling.md#what-is-database-modeling).
