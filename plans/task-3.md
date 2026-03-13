@@ -1,37 +1,45 @@
-# Task 3 Plan — System Agent
+# Task 3 Plan – The System Agent
 
-## Tool
+## Goal
 
-query_api
+Extend the agent from Task 2 by adding a new tool that allows it to query the backend API.  
+The agent should be able to answer system-level questions and data-dependent queries.
 
-Allows the agent to query the backend API.
+## Tool Schema
+
+A new tool `query_api` will be added to the existing tool set.
 
 Parameters:
-- method (string)
-- path (string)
-- body (optional JSON string)
 
-Authentication:
-Use LMS_API_KEY from environment variables.
+- method – HTTP method (GET, POST, etc.)
+- path – API endpoint path (e.g. /items/)
+- body – optional JSON body
 
-Base URL:
-AGENT_API_BASE_URL (default http://localhost:42002)
+The tool returns a JSON string containing:
 
-## Agent strategy
+- status_code
+- body
 
-The agent decides which tool to use:
+## Authentication
 
-- list_files → discover wiki files
-- read_file → read documentation or source code
-- query_api → get live system data
+The tool will authenticate using the environment variable:
 
-## Benchmark strategy
+LMS_API_KEY
 
-Run run_eval.py and iteratively fix failing cases.
+The base URL for the backend will be read from:
 
-Typical workflow:
-1. Check which tool should be used.
-2. Improve system prompt.
-3. Fix tool implementation.
+AGENT_API_BASE_URL (default: <http://localhost:42002>)
 
-Initial score: TBD
+## Agent Behavior
+
+The system prompt will guide the LLM:
+
+- use wiki tools for documentation questions
+- use read_file for source code questions
+- use query_api for runtime system data
+
+## Iteration Strategy
+
+I will test the agent locally using run_eval.py and adjust the system prompt and tool descriptions if the agent fails to choose the correct tool.
+
+The goal is to ensure that the agent correctly answers system questions and uses the appropriate tools.
