@@ -147,12 +147,12 @@ def _match(text: str, rule: dict) -> bool:
         return bool(re.search(rule["regex"], text, re.IGNORECASE))
 
     if "numeric_gt" in rule:
-        numbers = re.findall(r"[\d.]+", text)
+        numbers = re.findall(r"\d+\.?\d*", text)
         return any(float(n) > rule["numeric_gt"] for n in numbers if n)
 
     if "numeric_range" in rule:
         lo, hi = rule["numeric_range"]
-        numbers = re.findall(r"[\d.]+", text)
+        numbers = re.findall(r"\d+\.?\d*", text)
         return any(lo <= float(n) <= hi for n in numbers if n)
 
     return False
@@ -313,6 +313,7 @@ def main():
             print(f"\n  {RED}x [{index + 1}/{total}] {question}{RESET}")
             print(f"    Error: {error}")
             print(f"\n{BOLD}{passed}/{total} passed{RESET}")
+            
             sys.exit(1)
 
         ok, reason = _check_question(q, data)

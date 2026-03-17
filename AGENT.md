@@ -2,57 +2,96 @@
 
 ## Overview
 
-This project implements a CLI agent that connects to an LLM and answers questions.
-
-The agent receives a question from the command line, sends it to an LLM using an OpenAI-compatible API, and prints a JSON response.
+This project implements a CLI agent that connects to an LLM and answers questions about the software engineering lab system. The agent receives a question from the command line, runs an agentic loop with function calling, and prints a JSON response.
 
 ## Architecture
 
-User question → agent.py → LLM API → JSON output
+```
+User question → agent.py → LLM API (function calling) → tools → LLM → JSON output
+```
 
 ## Configuration
 
-The agent reads configuration from `.env.agent.secret`:
+The agent reads all configuration from environment variables (loaded from `.env.agent.secret` and `.env.docker.secret`):
 
-- LLM_API_KEY
-- LLM_API_BASE
-- LLM_MODEL
+| Variable | Purpose |
+|----------|---------|
+| `LLM_API_KEY` | LLM provider API key |
+| `LLM_API_BASE` | LLM API endpoint URL (OpenAI-compatible) |
+| `LLM_MODEL` | Model name |
+| `LMS_API_KEY` | Backend API key for `query_api` authentication |
+| `AGENT_API_BASE_URL` | Backend base URL (default: `http://localhost:42002`) |
 
 ## Running the agent
 
-Example:
-
-uv run agent.py "What does REST stand for?"
+```bash
+uv run agent.py "How many items are in the database?"
+```
 
 Output format:
 
-{"answer": "...", "tool_calls": []}
+```json
+{"answer": "...", "source": "...", "tool_calls": [...]}
+```
 
 ## Tools
 
 ### list_files
 
-Lists files in a directory.
+Lists files in a directory within the project root. Used to discover available wiki articles or source files.
+
+Parameters: `path` (string) — relative directory path.
 
 ### read_file
 
-Reads file contents.
+Reads contents of a file within the project root. Used for wiki documentation, source code, and configuration files. Content is limited to 8000 characters to stay within LLM context limits.
+
+Parameters: `path` (string) — relative file path.
+
+### query_api
+
+Sends an HTTP request to the deployed backend API. Authenticated with `LMS_API_KEY` via Bearer token. Used for any question requiring live runtime data: item counts, scores, analytics, endpoint behavior.
+
+Parameters: `method` (string), `path` (string), `body` (string, optional).
+
+Returns a JSON string with `status_code` and `body`.
+
+## How the LLM decides between tools
+
+The system prompt gives clear guidance:
+
+- **Documentation/wiki questions** → `list_files("wiki")` then `read_file` the relevant article
+- **Source code questions** (framework, architecture, implementation details) → `read_file` the relevant source file
+- **Runtime/data questions** (item counts, scores, analytics, completion rates) → `query_api`
+- **Multi-step questions** (e.g., diagnose a bug by reading an API error then the source) → chain multiple tools
 
 ## Agentic loop
 
-1. Send question + tools to LLM.
-2. If tool_calls returned:
-   execute tools and send results back.
-3. Repeat until answer produced.
+1. Send question + tools schema to LLM.
+2. If LLM returns `tool_calls`: execute each tool and send results back as `tool` role messages.
+3. Repeat up to 10 iterations until LLM produces a text answer (no tool calls).
+4. Return `{"answer": ..., "source": ..., "tool_calls": [...]}`.
 
 ## System Agent (Task 3)
 
-In Task 3 the agent was extended with a new capability: interacting with the running backend system. While the documentation agent from Task 2 could read wiki files and source code, it could not access live system data. To solve this limitation, a new tool called `query_api` was introduced.
+In Task 3 the agent was extended with a new `query_api` tool that allows it to talk to the running backend. This enables answering data-dependent questions (item counts, analytics scores) that cannot be answered from static files alone.
 
-The `query_api` tool allows the agent to send HTTP requests to the backend API. The tool accepts three parameters: `method`, `path`, and an optional `body`. The method represents the HTTP method such as GET or POST, the path specifies the endpoint (for example `/items/`), and the body can contain a JSON payload if required. The tool returns a JSON string that includes both the HTTP status code and the response body.
+### Authentication
 
-Authentication for backend requests is handled through the `LMS_API_KEY` environment variable. This ensures that sensitive credentials are not hardcoded in the source code. The base URL of the backend service is also configurable through the `AGENT_API_BASE_URL` environment variable, with a default value of `http://localhost:42002`.
+Backend requests are authenticated with `LMS_API_KEY` from environment variables via `Authorization: Bearer <key>` header. The base URL is read from `AGENT_API_BASE_URL` (default `http://localhost:42002`). Neither value is hardcoded.
 
-The system prompt was updated to help the LLM choose the correct tool depending on the question. Documentation questions should use the wiki tools (`list_files` and `read_file`), source code questions should use `read_file`, and runtime system data questions should use `query_api`.
+### Lessons learned from the benchmark
 
-This design allows the agent to combine multiple information sources: documentation, source code, and live system data. As a result, the agent can answer both static system questions (for example, the framework used by the backend) and dynamic questions that require querying the running system.
+1. **Rule-based heuristics fail**: The initial implementation used keyword matching instead of an LLM. It failed on question variations the heuristic did not anticipate. Replacing it with a proper LLM agentic loop fixed the majority of failures.
+
+2. **Tool descriptions matter**: The LLM chooses tools based on their descriptions. Vague descriptions cause wrong tool selection. Explicit guidance ("use query_api for runtime data, NOT for documentation") significantly improved tool choice accuracy.
+
+3. **Content limits**: Large files cause the LLM to loop or get confused. Truncating `read_file` output to 8000 characters prevents this while keeping enough context.
+
+4. **`content` can be null**: When the LLM returns tool calls, `content` is `null` (not missing). Using `msg.get("content") or ""` avoids `NoneType` errors.
+
+5. **Source tracking**: The `source` field should be set to the first meaningful file or API path used, giving the checker a reference for verification.
+
+### Final eval score
+
+All 10 local questions passed after switching from heuristics to a real LLM agentic loop with function calling.

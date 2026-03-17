@@ -1,3 +1,4 @@
+
 # Skill conventions
 
 Skills are agent-executable instruction files stored in `.agents/skills/`.
