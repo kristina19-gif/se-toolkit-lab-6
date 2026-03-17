@@ -313,7 +313,6 @@ def main():
             print(f"\n  {RED}x [{index + 1}/{total}] {question}{RESET}")
             print(f"    Error: {error}")
             print(f"\n{BOLD}{passed}/{total} passed{RESET}")
-            
             sys.exit(1)
 
         ok, reason = _check_question(q, data)
