@@ -2,6 +2,8 @@ import sys
 import os
 import json
 import urllib.request
+import urllib.error
+import requests as _requests
 from pathlib import Path
 from dotenv import dotenv_values
 
@@ -172,19 +174,18 @@ def llm_call(env, messages):
     model = env.get("LLM_MODEL", "")
 
     url = f"{api_base}/chat/completions"
-    payload = json.dumps({
+    payload = {
         "model": model,
         "messages": messages,
         "tools": TOOLS,
-    }).encode("utf-8")
-
+    }
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
     }
-    req = urllib.request.Request(url, data=payload, method="POST", headers=headers)
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        return json.loads(resp.read())
+    resp = _requests.post(url, json=payload, headers=headers, timeout=120)
+    resp.raise_for_status()
+    return resp.json()
 
 
 # ─── Agent logic ──────────────────────────────────────────────────────────────
