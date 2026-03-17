@@ -2,44 +2,55 @@
 
 ## Goal
 
-Extend the agent from Task 2 by adding a new tool that allows it to query the backend API.  
-The agent should be able to answer system-level questions and data-dependent queries.
+Extend the agent from Task 2 by adding a `query_api` tool that allows it to talk to the deployed backend, and replace the heuristic-based agent with a proper LLM agentic loop using function calling.
 
 ## Tool Schema
 
-A new tool `query_api` will be added to the existing tool set.
+A new tool `query_api` added to the existing tool set.
 
 Parameters:
+- `method` — HTTP method (GET, POST, etc.)
+- `path` — API endpoint path (e.g. `/items/`)
+- `body` — optional JSON body string
 
-- method – HTTP method (GET, POST, etc.)
-- path – API endpoint path (e.g. /items/)
-- body – optional JSON body
-
-The tool returns a JSON string containing:
-
-- status_code
-- body
+Returns a JSON string with `status_code` and `body`.
 
 ## Authentication
 
-The tool will authenticate using the environment variable:
+The tool authenticates using the environment variable `LMS_API_KEY` via `Authorization: Bearer <key>` header.
 
-LMS_API_KEY
+The base URL is read from `AGENT_API_BASE_URL` (default: `http://localhost:42002`).
 
-The base URL for the backend will be read from:
+## LLM Agentic Loop
 
-AGENT_API_BASE_URL (default: <http://localhost:42002>)
+The agent uses a proper LLM agentic loop with function calling:
+1. Send question + tool schemas to LLM
+2. If LLM returns tool calls — execute them, send results back
+3. Repeat until LLM produces a final text answer
+4. Return `{"answer": ..., "source": ..., "tool_calls": [...]}`
 
-## Agent Behavior
+## System Prompt Strategy
 
-The system prompt will guide the LLM:
+The system prompt guides the LLM on tool selection:
+- wiki questions → `list_files("wiki")` + `read_file`
+- source code questions → `read_file`
+- runtime/data questions → `query_api`
 
-- use wiki tools for documentation questions
-- use read_file for source code questions
-- use query_api for runtime system data
+## Benchmark Results
+
+Initial implementation used keyword-based heuristics without any LLM calls. This failed on many eval questions because:
+- Heuristics did not cover question variations
+- Multi-step and reasoning questions require actual LLM capability
+- Tool selection must be context-aware, not keyword-based
+
+After replacing heuristics with a real LLM agentic loop:
+- All 10 local benchmark questions pass
+- The LLM correctly selects `query_api` for data questions and `read_file` for code/wiki questions
 
 ## Iteration Strategy
 
-I will test the agent locally using run_eval.py and adjust the system prompt and tool descriptions if the agent fails to choose the correct tool.
-
-The goal is to ensure that the agent correctly answers system questions and uses the appropriate tools.
+1. Implement the LLM agentic loop with all three tools
+2. Run `uv run run_eval.py` and check failures
+3. If tool selection is wrong: improve tool descriptions in the schema
+4. If answers are wrong: improve the system prompt
+5. If agent loops: check content limits and max iteration cap
