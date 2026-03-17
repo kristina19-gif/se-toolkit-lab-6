@@ -176,7 +176,6 @@ def llm_call(env, messages):
         "model": model,
         "messages": messages,
         "tools": TOOLS,
-        "tool_choice": "auto",
     }).encode("utf-8")
 
     headers = {
@@ -184,7 +183,7 @@ def llm_call(env, messages):
         "Authorization": f"Bearer {api_key}",
     }
     req = urllib.request.Request(url, data=payload, method="POST", headers=headers)
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    with urllib.request.urlopen(req, timeout=120) as resp:
         return json.loads(resp.read())
 
 
@@ -198,7 +197,14 @@ def run_agent(env, question):
     source = ""
 
     for _ in range(10):  # max iterations
-        response = llm_call(env, messages)
+        try:
+            response = llm_call(env, messages)
+        except Exception as e:
+            return {
+                "answer": f"LLM call failed: {e}",
+                "source": source,
+                "tool_calls": tool_calls_log,
+            }
         msg = response["choices"][0]["message"]
         messages.append(msg)
 
@@ -256,7 +262,10 @@ def main():
         print("Usage: uv run agent.py \"<question>\"", file=sys.stderr)
         sys.exit(1)
     question = sys.argv[1]
-    result = run_agent(env, question)
+    try:
+        result = run_agent(env, question)
+    except Exception as e:
+        result = {"answer": f"Agent error: {e}", "source": "", "tool_calls": []}
     print(json.dumps(result))
 
 
