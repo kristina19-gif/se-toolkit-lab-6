@@ -1,97 +1,65 @@
-# Agent
+# Agent Documentation
+
+This document describes the architecture and usage of the agent built for Lab 6.
 
 ## Overview
-
-This project implements a CLI agent that connects to an LLM and answers questions about the software engineering lab system. The agent receives a question from the command line, runs an agentic loop with function calling, and prints a JSON response.
+The agent is a CLI tool (`agent.py`) that interacts with an LLM using an OpenAI-compatible API. It is designed to answer questions about the project documentation, source code, and live system state by navigating the repository's file system and querying the backend API.
 
 ## Architecture
+- **Language:** Python 3.14.2
+- **Agentic Loop:** The agent implements a loop (up to 10 iterations) where the LLM can decide to call tools to gather information before providing a final answer.
+- **Tools:**
+  - `list_files(path)`: Lists entries in a directory relative to the project root.
+  - `read_file(path)`: Reads the content of a file relative to the project root.
+  - `query_api(method, path, body=None, use_auth=True)`: Sends HTTP requests to the deployed backend API.
+- **LLM Provider:** Qwen Code API (OpenAI-compatible) deployed on a remote VM.
+- **Model:** `qwen3-coder-plus` (Qwen 3 Coder Plus).
 
-```
-User question → agent.py → LLM API (function calling) → tools → LLM → JSON output
-```
+## System Agent Capabilities
+With the addition of the `query_api` tool, the agent can now answer:
+- **Static system facts:** Identifying frameworks (FastAPI), ports, and status codes by reading source code (e.g., `backend/app/main.py`) or configuration files.
+- **Data-dependent queries:** Retrieving live data like item counts, student scores, or analytics directly from the running backend.
+- **Bug diagnosis:** Investigating API errors by first querying the endpoint and then reading the corresponding router logic in `backend/app/routers/` to identify the root cause.
+
+## Security & Authentication
+- **File System:** Tools are restricted to the project root. Path traversal (e.g., `..`) is blocked.
+- **API Authentication:** The `query_api` tool uses the `LMS_API_KEY` from environment variables to authenticate with the backend via a `Bearer` token in the `Authorization` header.
 
 ## Configuration
+The agent reads its configuration from `.env.agent.secret` and `.env.docker.secret` files or environment variables:
+- `LLM_API_KEY`: API key for the LLM provider.
+- `LLM_API_BASE`: Base URL for the LLM API.
+- `LLM_MODEL`: The model name to use for chat completions.
+- `LMS_API_KEY`: Backend API key for `query_api` auth.
+- `AGENT_API_BASE_URL`: Base URL for the backend API (default: `http://localhost:42002`).
 
-The agent reads all configuration from environment variables (loaded from `.env.agent.secret` and `.env.docker.secret`):
+## Tool Selection Logic
+The agent follows a hierarchical strategy for tool selection:
+1. **Wiki Tools:** For documentation and general project questions, it prioritizes `list_files` and `read_file` on the `wiki/` directory.
+2. **System Tools:** For live data, it uses `query_api`.
+3. **Source Code Tools:** For architectural or logic questions, it reads files in `backend/app/`. If an API call fails, it automatically switches to reading source code to diagnose the bug.
 
-| Variable | Purpose |
-|----------|---------|
-| `LLM_API_KEY` | LLM provider API key |
-| `LLM_API_BASE` | LLM API endpoint URL (OpenAI-compatible) |
-| `LLM_MODEL` | Model name |
-| `LMS_API_KEY` | Backend API key for `query_api` authentication |
-| `AGENT_API_BASE_URL` | Backend base URL (default: `http://localhost:42002`) |
+## Lessons Learned & Benchmark
+The local evaluation benchmark (`run_eval.py`) was instrumental in refining the agent's behavior. Initial challenges included:
+- **Missing Source:** The agent sometimes provided answers without the `source` field. A retry mechanism and improved system prompt were added to enforce structured output.
+- **Tool Chaining:** For complex questions like "find the bug in /analytics/", the agent learned to first call the API to see the error, and then read the source code.
+- **Auth Handling:** Ensuring the `query_api` correctly defaults to using the `LMS_API_KEY` was critical for passing system-level checks.
+- **Risky Operations:** The agent's prompt was specifically improved to scan for `ZeroDivisionError`, `None`-unsafe sorting, and list index errors when investigating bugs.
+- **Data Counting:** The agent was trained to query endpoints (like `/learners/`) and manually count results in the JSON list to provide accurate statistics.
 
-## Running the agent
-
+## Usage
+Run the agent using `uv`:
 ```bash
 uv run agent.py "How many items are in the database?"
 ```
 
-Output format:
-
+## Output Format
+The agent outputs a single JSON line to stdout:
 ```json
-{"answer": "...", "source": "...", "tool_calls": [...]}
+{
+  "answer": "The text answer from the LLM.",
+  "source": "wiki/some-file.md#section-anchor",
+  "tool_calls": [...]
+}
 ```
-
-## Tools
-
-### list_files
-
-Lists files in a directory within the project root. Used to discover available wiki articles or source files.
-
-Parameters: `path` (string) — relative directory path.
-
-### read_file
-
-Reads contents of a file within the project root. Used for wiki documentation, source code, and configuration files. Content is limited to 8000 characters to stay within LLM context limits.
-
-Parameters: `path` (string) — relative file path.
-
-### query_api
-
-Sends an HTTP request to the deployed backend API. Authenticated with `LMS_API_KEY` via Bearer token. Used for any question requiring live runtime data: item counts, scores, analytics, endpoint behavior.
-
-Parameters: `method` (string), `path` (string), `body` (string, optional).
-
-Returns a JSON string with `status_code` and `body`.
-
-## How the LLM decides between tools
-
-The system prompt gives clear guidance:
-
-- **Documentation/wiki questions** → `list_files("wiki")` then `read_file` the relevant article
-- **Source code questions** (framework, architecture, implementation details) → `read_file` the relevant source file
-- **Runtime/data questions** (item counts, scores, analytics, completion rates) → `query_api`
-- **Multi-step questions** (e.g., diagnose a bug by reading an API error then the source) → chain multiple tools
-
-## Agentic loop
-
-1. Send question + tools schema to LLM.
-2. If LLM returns `tool_calls`: execute each tool and send results back as `tool` role messages.
-3. Repeat up to 10 iterations until LLM produces a text answer (no tool calls).
-4. Return `{"answer": ..., "source": ..., "tool_calls": [...]}`.
-
-## System Agent (Task 3)
-
-In Task 3 the agent was extended with a new `query_api` tool that allows it to talk to the running backend. This enables answering data-dependent questions (item counts, analytics scores) that cannot be answered from static files alone.
-
-### Authentication
-
-Backend requests are authenticated with `LMS_API_KEY` from environment variables via `Authorization: Bearer <key>` header. The base URL is read from `AGENT_API_BASE_URL` (default `http://localhost:42002`). Neither value is hardcoded.
-
-### Lessons learned from the benchmark
-
-1. **Rule-based heuristics fail**: The initial implementation used keyword matching instead of an LLM. It failed on question variations the heuristic did not anticipate. Replacing it with a proper LLM agentic loop fixed the majority of failures.
-
-2. **Tool descriptions matter**: The LLM chooses tools based on their descriptions. Vague descriptions cause wrong tool selection. Explicit guidance ("use query_api for runtime data, NOT for documentation") significantly improved tool choice accuracy.
-
-3. **Content limits**: Large files cause the LLM to loop or get confused. Truncating `read_file` output to 8000 characters prevents this while keeping enough context.
-
-4. **`content` can be null**: When the LLM returns tool calls, `content` is `null` (not missing). Using `msg.get("content") or ""` avoids `NoneType` errors.
-
-5. **Source tracking**: The `source` field should be set to the first meaningful file or API path used, giving the checker a reference for verification.
-
-### Final eval score
-
-All 10 local questions passed after switching from heuristics to a real LLM agentic loop with function calling.
+All logs are directed to stderr.
