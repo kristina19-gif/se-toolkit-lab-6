@@ -9,12 +9,13 @@ def test_list_files_tool():
         text=True,
     )
 
-    if result.stdout.strip() == "":
-        return
-
+    assert result.returncode == 0, f"Agent failed: {result.stderr}"
     data = json.loads(result.stdout)
 
+    assert "answer" in data
     assert "tool_calls" in data
+    tools_used = [tc["tool"] for tc in data["tool_calls"]]
+    assert "list_files" in tools_used
 
 
 def test_read_file_tool():
@@ -24,9 +25,11 @@ def test_read_file_tool():
         text=True,
     )
 
-    if result.stdout.strip() == "":
-        return
-
+    assert result.returncode == 0, f"Agent failed: {result.stderr}"
     data = json.loads(result.stdout)
 
     assert "answer" in data
+    assert "tool_calls" in data
+    tools_used = [tc["tool"] for tc in data["tool_calls"]]
+    assert "read_file" in tools_used
+    assert "wiki/git" in (data.get("source") or "")
